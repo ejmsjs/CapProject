@@ -1,0 +1,197 @@
+---
+title: "capstone"
+output: html_document
+---
+
+Source : https://osf.io/ru5kc/?show=revision 
+
+```{r}
+library(broom)
+library(mosaic)
+library(dplyr)
+library(tidyverse)
+library(tidymodels)
+library(discrim)
+library(EBImage)
+```
+
+# SPIN Questionnaire 
+```{r}
+img = readImage("https://d33v4339jhl8k0.cloudfront.net/docs/assets/5bedba8804286304a71c50f5/images/5c4b7cb02c7d3a66e32daa4c/img-19274-1548450913-2068804204.png")
+display(img, method = "raster")
+```
+
+# GAD Questionnaire
+```{r}
+img = readImage("https://therapymeetsnumbers.com/wp-content/uploads/2018/09/29-gad-7-1.jpg")
+display(img, method = "raster")
+```
+
+# SLW Questionnaire
+
+```{r}
+img = readImage("https://d33v4339jhl8k0.cloudfront.net/docs/assets/5bedba8804286304a71c50f5/images/5c4b7cb2042863543ccc4054/img-19274-1548450910-1395548438.png")
+display(img, method = "raster")
+```
+
+
+
+
+```{r}
+gd <-read.csv('GamingStudy_data.csv', header = TRUE, sep = ",")
+
+gd <- as_tibble(gd)
+
+
+
+
+gd
+
+str(gd)
+```
+
+```{r}
+gd_split <- initial_split(gd, strata = GAD_T, prop = .75, .25)
+gd_split
+
+gd_train <- training(gd_split)
+gd_test <- testing(gd_split)
+```
+Looking for the outlier
+
+```{r}
+ggplot(gd_lm_aug, aes(y = .resid, x = .fitted )) + 
+  geom_point() +
+  geom_hline(yintercept = 0)
+```
+
+```{r}
+gd_lm <- lm(Hours~ GAD_T  + GAD1 + GAD2 + GAD3 + GAD4 + GAD5 + GAD6 + GAD7 + SWL1+SWL2+SWL3+SWL4+SWL5+SPIN1+SPIN2+SPIN3+SPIN4+SPIN5+SPIN6+SPIN7+SPIN8+SPIN10+SPIN11+SPIN12+SPIN13+SPIN14+SPIN15+SPIN16+SPIN17+Narcissism+Age+SWL_T+SPIN_T, data = gd)
+gd_lm_tidy <- tidy(gd_lm, conf.int = TRUE)
+gd_lm_tidy
+```
+
+```{r}
+gd_lm_aug <- augment(gd_lm)
+gd_lm_aug
+```
+
+```{r}
+arrange(gd_lm_aug, desc(.std.resid))
+```
+```{r}
+gd_lm_aug2 <- filter(gd_lm_aug, Hours < 200)
+```
+
+```{r}
+gd_lm_aug2
+```
+
+
+```{r}
+ggplot(gd_lm_aug2, aes(y = .resid, x = .fitted )) + 
+  geom_point() +
+  geom_hline(yintercept = 0)
+```
+
+```{r}
+ggplot(gd_lm_aug2, aes(y = .std.resid, x = .fitted )) + 
+  geom_point() +
+  geom_hline(yintercept = 0)
+```
+
+```{r}
+gd2 <- filter(gd, Hours < 200)
+```
+
+
+
+```{r}
+ggplot(gd2, aes(x = GAD_T, y = log(Hours))) + geom_point()
+```
+
+```{r}
+ggplot(gd2, aes(x = SWL_T, y = log(Hours))) + geom_point()
+```
+
+```{r}
+ggplot(gd2, aes(x = SPIN_T, y = log(Hours))) + geom_point()
+```
+
+
+```{r}
+lr_spec <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+```
+
+```{r}
+lr_fit <- lr_spec %>%
+  fit(
+    GAD_T ~ Hours + Narcissism + Age + SWL_T + SPIN_T,
+    data = gd2
+    )
+
+lr_fit
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
