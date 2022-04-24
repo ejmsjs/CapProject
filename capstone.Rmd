@@ -13,6 +13,14 @@ library(tidyverse)
 library(tidymodels)
 library(discrim)
 library(EBImage)
+library(lavaan)
+library(semPlot)
+library(OpenMx)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(GGally)
+library(crunch)
 ```
 
 # SPIN Questionnaire 
@@ -36,19 +44,30 @@ display(img, method = "raster")
 
 
 
+## The Data
 
 ```{r}
 gd <-read.csv('GamingStudy_data.csv', header = TRUE, sep = ",")
 
 gd <- as_tibble(gd)
 
-
-
-
 gd
+
+gd$GADE = as.factor(gd$GADE)
+gd$Game = as.factor(gd$Game)
+gd$Platform = as.factor(gd$Platform)
+gd$earnings = as.factor(gd$earnings)
+gd$whyplay = as.factor(gd$whyplay)
+gd$Gender = as.factor(gd$Gender)
+gd$Work = as.factor(gd$Work)
+gd$Degree = as.factor(gd$Degree)
+gd$Playstyle = as.factor(gd$Playstyle)
+gd$Residence = as.factor(gd$Residence)
 
 str(gd)
 ```
+
+# Splitting the data in case I want to use it
 
 ```{r}
 gd_split <- initial_split(gd, strata = GAD_T, prop = .75, .25)
@@ -57,13 +76,8 @@ gd_split
 gd_train <- training(gd_split)
 gd_test <- testing(gd_split)
 ```
-Looking for the outlier
 
-```{r}
-ggplot(gd_lm_aug, aes(y = .resid, x = .fitted )) + 
-  geom_point() +
-  geom_hline(yintercept = 0)
-```
+# Looking for the outlier
 
 ```{r}
 gd_lm <- lm(Hours~ GAD_T  + GAD1 + GAD2 + GAD3 + GAD4 + GAD5 + GAD6 + GAD7 + SWL1+SWL2+SWL3+SWL4+SWL5+SPIN1+SPIN2+SPIN3+SPIN4+SPIN5+SPIN6+SPIN7+SPIN8+SPIN10+SPIN11+SPIN12+SPIN13+SPIN14+SPIN15+SPIN16+SPIN17+Narcissism+Age+SWL_T+SPIN_T, data = gd)
@@ -77,10 +91,23 @@ gd_lm_aug
 ```
 
 ```{r}
+ggplot(gd_lm_aug, aes(y = .std.resid, x = .fitted )) + 
+  geom_point() +
+  geom_hline(yintercept = 0)  + 
+  labs(title = "Standard Residuals Hours Before Getting Rid of Outliers", xlab = "Fitted", ylab = "Standard Residual")  
+```
+
+```{r}
+ggplot(gd_lm_aug, aes(y = .resid, x = .fitted )) + 
+  geom_point() +
+  geom_hline(yintercept = 0)
+```
+
+```{r}
 arrange(gd_lm_aug, desc(.std.resid))
 ```
 ```{r}
-gd_lm_aug2 <- filter(gd_lm_aug, Hours < 200)
+gd_lm_aug2 <- filter(gd_lm_aug, Hours < 113)
 ```
 
 ```{r}
@@ -97,14 +124,28 @@ ggplot(gd_lm_aug2, aes(y = .resid, x = .fitted )) +
 ```{r}
 ggplot(gd_lm_aug2, aes(y = .std.resid, x = .fitted )) + 
   geom_point() +
-  geom_hline(yintercept = 0)
+  geom_hline(yintercept = 0) +
+  labs(title = "Data After Getting Rid of the Outliers")
+```
+
+## I filter out the hours and NAs
+
+```{r}
+gd2 <- filter(gd, Hours < 113)
 ```
 
 ```{r}
-gd2 <- filter(gd, Hours < 200)
+gd2 <- gd2[complete.cases(gd2[ , c("Hours", "Narcissism", "Gender", "Age", "Game", "GAD_T", "SPIN_T", "SWL_T")]),]
 ```
 
+## Showing the data now
 
+```{r}
+arrange(gd2, desc(Hours))
+view(gd2)
+```
+
+## More graphs of the data
 
 ```{r}
 ggplot(gd2, aes(x = GAD_T, y = log(Hours))) + geom_point()
@@ -120,78 +161,381 @@ ggplot(gd2, aes(x = SPIN_T, y = log(Hours))) + geom_point()
 
 
 ```{r}
-lr_spec <- logistic_reg() %>%
-  set_engine("glm") %>%
-  set_mode("classification")
+ggplot(gd2, aes(x = SWL_T)) +
+  geom_histogram(binwidth = 1, boundary = 3) + 
+  labs(title = "SWL Total", xlab = "SWL Total Score", ylab = "Count") + 
+  geom_vline(aes(xintercept = 5), colour="blue") + 
+  geom_vline(aes(xintercept = 9), colour="blue") + 
+  geom_vline(aes(xintercept = 31), colour="red") + 
+  geom_vline(aes(xintercept = 35), colour="red") +
+  ggtitle("Satisfaction With Life Total") + xlab("Total Score") + ylab("Count")
+#Between the two separate line things are extrememly dissatisfied with life and extremely satisfied with life
+```
+
+
+```{r}
+ggplot(gd2, aes(x = SPIN_T)) +
+  geom_histogram(binwidth = 1, boundary = 3) +
+  labs(title = "SPIN Total", xlab = "SPIN Total Score", ylab = "Count") +
+  geom_vline(aes(xintercept = 21), colour="black") +
+  geom_vline(aes(xintercept = 30), colour="blue") + 
+  geom_vline(aes(xintercept = 40), colour="red") + 
+  geom_vline(aes(xintercept = 50), colour="green") +
+  ggtitle("Social Phobia Inventory Total") + xlab("Total Score") + ylab("Count")
+#Lines indicate mild, moderate, severe, very severe social phobia
 ```
 
 ```{r}
-lr_fit <- lr_spec %>%
-  fit(
-    GAD_T ~ Hours + Narcissism + Age + SWL_T + SPIN_T,
-    data = gd2
-    )
+ggplot(gd2, aes(x = GAD_T)) +
+  geom_histogram(binwidth = 1, boundary = 3) +
+  labs(title = "GAD Total", xlab = "GAD Total Score", ylab = "Count") + 
+  geom_vline(aes(xintercept = 5), colour="black") +
+  geom_vline(aes(xintercept = 10), colour="blue") +
+  geom_vline(aes(xintercept = 15), colour="red") +
+  ggtitle("General Anxiety Disorder Total") + xlab("Total Score") + ylab("Count")
+#Lines represent mild, moderate, and severe levels
+```
 
-lr_fit
+
+```{r}
+ggplot(gd2, aes(x = Hours)) +
+  geom_histogram(binwidth = 5, boundary = 3)
+```
+
+```{r}
+ggplot(gd2, aes(x = log(GAD4))) +
+  geom_histogram(binwidth = .5, boundary = 3)
+```
+## Distribution between the different games
+
+
+```{r}
+library(ggplot2)
+ggplot(data=gd2, aes(x=GAD_T,fill = Game)) + geom_histogram()
+```
+
+```{r}
+library(ggplot2)
+ggplot(data=gd2, aes(x=SPIN_T,fill = Game)) + geom_histogram()
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(data=gd2, aes(x=SWL_T,fill = Game)) + geom_histogram()
+```
+
+# ANOVA
+
+## GADT
+
+```{r}
+ggplot(gd2, aes(y = GAD_T, x = Game)) +
+    geom_boxplot() + coord_flip()
+```
+
+```{r}
+lmgadaov <- lm(GAD_T ~ Game, data = gd2)
+summary(lmgadaov)
+```
+
+
+```{r}
+gd2an <- aov(GAD_T ~ Game, data = gd2)
+gd2ant <- tidy(gd2an)
+gd2ant
+
+pdist("f", df1 = gd2ant$df[1], df2 = gd2ant$df[2], df3 = gd2ant$df[3], df4 = gd2ant$df[4], df5 = gd2ant$df[5], df6 = gd2ant$df[6], df7 = gd2ant$df[7], df8 = gd2ant$df[8], df9 = gd2ant$df[9], df10 = gd2ant$df[10],
+      q = gd2ant$statistic[1],
+      invisible = TRUE)
+```
+
+
+```{r}
+P1 <-gd2ant$p.value[1]
+P1
+```
+
+So then there is no evidence to relate GAD scores by difference in game. 
+
+
+## SPINT
+
+
+```{r}
+ggplot(gd2, aes(y = SPIN_T, x = Game)) +
+    geom_boxplot() + coord_flip()
+```
+
+```{r}
+lmspaov <- lm(SPIN_T ~ Game, data = gd2)
+summary(lmspaov)
+```
+
+```{r}
+gd2an2 <- aov(SPIN_T ~ Game, data = gd2)
+gd2ant2 <- tidy(gd2an2)
+gd2ant2
+
+pdist("f", df1 = gd2ant2$df[1], df2 = gd2ant2$df[2], df3 = gd2ant2$df[3], df4 = gd2ant2$df[4], df5 = gd2ant2$df[5], df6 = gd2ant2$df[6], df7 = gd2ant2$df[7], df8 = gd2ant2$df[8], df9 = gd2ant2$df[9], df10 = gd2ant2$df[10],
+      q = gd2ant2$statistic[1],
+      invisible = TRUE)
+```
+
+
+```{r}
+P2 <-gd2ant2$p.value[1]
+P2
+```
+
+So then there is evidence of a difference in spin scores between games. 
+
+
+## SWLT
+
+```{r}
+ggplot(gd2, aes(y = SWL_T, x = Game)) +
+    geom_boxplot() + coord_flip() +
+    ggtitle("Game Vs. SWL Total") + ylab("SWL Total Score") + xlab("Game Played")
+```
+
+```{r}
+lmswaov <- lm(SWL_T ~ Game, data = gd2)
+summary(lmswaov)
+```
+
+
+
+```{r}
+gd2an3 <- aov(SWL_T ~ Game, data = gd2)
+gd2ant3 <- tidy(gd2an3)
+gd2ant3
+
+pdist("f", df1 = gd2ant3$df[1], df2 = gd2ant3$df[2], df3 = gd2ant3$df[3], df4 = gd2ant3$df[4], df5 = gd2ant3$df[5], df6 = gd2ant3$df[6], df7 = gd2ant3$df[7], df8 = gd2ant3$df[8], df9 = gd2ant3$df[9], df10 = gd2ant3$df[10],
+      q = gd2ant3$statistic[1],
+      invisible = TRUE)
+```
+
+
+```{r}
+P3 <-gd2ant3$p.value[1]
+P3
+```
+
+So there is a difference between games in swl scores 
+
+## Narcissism & Hours
+
+```{r}
+lmncaov <- lm(Narcissism ~ Game, data = gd2)
+summary(lmncaov)
+```
+
+Some significance between these values, but really not much of a difference between groups when pertaining to narcissism
+
+```{r}
+lmhraov <- lm(Hours ~ Game, data = gd2)
+summary(lmhraov)
+```
+
+There is a deeply significant difference between groups when pertaining to hours played. 
+
+## But as all data sets have their limitations 
+
+```{r}
+tally(~ Game, data = gd2)
+```
+
+```{r}
+par(las=2)
+counts <- table(gd$Game)
+barplot(counts, main="Game", horiz=TRUE, cex.names=0.8
+  )
+```
+
+
+## So we take every game but LoL out
+
+```{r}
+gdlol <- filter(gd2, Game == "League of Legends")
+```
+
+```{r}
+gdlol <- gdlol[complete.cases(gdlol[ , c("Hours", "Narcissism", "Game", "GAD_T", "SPIN_T", "SWL_T")]),]
+```
+
+
+
+```{r}
+str(gdlol)
+gdlol
+```
+
+```{r}
+specmod <- "
+# Path c (direct effect)
+GAD_T ~ c*Hours
+
+# Path a
+Narcissism ~ a*Hours
+
+# Path b 
+GAD_T ~ b*Narcissism
+
+# Indirect Effect (a*b)
+ab := a*b
+"
+
+fitmod <- sem(specmod, data = gdlol)
+
+summary(fitmod, fit.measures = TRUE, rsquare = TRUE)
+```
+
+```{r}
+specmod2 <- "
+# Path c (direct effect)
+SPIN_T ~ c*Hours
+
+# Path a
+Narcissism ~ a*Hours
+
+# Path b 
+SPIN_T ~ b*Narcissism
+
+# Indirect Effect (a*b)
+ab := a*b
+"
+
+fitmod2 <- sem(specmod2, data = gdlol)
+
+summary(fitmod2, fit.measures = TRUE, rsquare = TRUE)
+```
+
+```{r}
+specmod3 <- "
+# Path c (direct effect)
+SWL_T ~ c*Hours
+
+# Path a
+Narcissism ~ a*Hours
+
+# Path b 
+SWL_T ~ b*Narcissism
+
+# Indirect Effect (a*b)
+ab := a*b
+"
+
+fitmod3 <- sem(specmod3, data = gdlol)
+
+summary(fitmod3, fit.measures = TRUE, rsquare = TRUE)
+```
+
+
+```{r}
+
+fitmod33 <- sem(specmod3, data = gdlol, se = "bootstrap", bootstrap = 100)
+parameterEstimates(fitmod33, ci=TRUE, level = .95, boot.ci.type="perc")
 ```
 
 ```{r}
 
+fitmod22 <- sem(specmod2, data = gdlol, se = "bootstrap", bootstrap = 100)
+parameterEstimates(fitmod22, ci=TRUE, level = .95, boot.ci.type="perc")
 ```
 
 ```{r}
-
+fitmod11 <- sem(specmod, data = gdlol, se = "bootstrap", bootstrap = 100)
+parameterEstimates(fitmod11, ci=TRUE, level = .95, boot.ci.type="perc")
 ```
 
 ```{r}
+model <-'
+SWL_T ~ Hours + Age + Narcissism 
+SPIN_T ~ Hours + Age + Narcissism 
+GAD_T ~ Hours + Age + Narcissism 
 
+
+Hours~~Age 
+Hours~~ Narcissism 
+Age~~Narcissism
+
+SWL_T~ GAD_T + SPIN_T
+'
+```
+
+
+```{r}
+fit <- lavaan(model, data = gdlol, auto.var = TRUE)
+summary(fit, fit.measures = TRUE, standardized=TRUE, rsquare = TRUE)
 ```
 
 ```{r}
+parameterEstimates(fit)
+```
 
+
+```{r}
+semPaths(fit, what = "std", whatLabels = "std", style="lisrel", edge.label.cex=1, curvePivot=TRUE)
+```
+
+
+```{r}
+semPaths(fit, what= "paths", whatLabels="par", style="lisrel", layout="circle2", rotation = 1)
+```
+
+# What if we took out the people who do and do not play for fun??
+
+```{r}
+gd4fun <- filter(gdlol, whyplay == "having fun")
+
+gd4fun <- gd4fun[complete.cases(gd4fun[ , c("Hours", "Narcissism", "Gender", "Age", "Game", "GAD_T", "SPIN_T", "SWL_T")]),]
+
+#So I filter out the people who responded to why do I play as having fun. 
+```
+
+
+```{r}
+fit <- lavaan(model, data = gd4fun, auto.var = TRUE)
+summary(fit, fit.measures = TRUE, standardized=TRUE, rsquare = TRUE)
+```
+
+
+```{r}
+parameterEstimates(fit)
 ```
 
 ```{r}
-
+semPaths(fit, what = "std", whatLabels = "std", style="lisrel", edge.label.cex=1, curvePivot=TRUE)
 ```
 
 ```{r}
+semPaths(fit, what= "paths", whatLabels="par", style="lisrel", layout="circle2", rotation = 1)
+```
 
+## Now we take out the people who only play to have fun
+
+```{r}
+gdnfun <- filter(gdlol, whyplay != "having fun")
+
+gdnfun <- gdnfun[complete.cases(gdnfun[ , c("Hours", "Narcissism", "Gender", "Age", "Game", "GAD_T", "SPIN_T", "SWL_T")]),]
+
+#So I take out the people who responded to why do I play as having fun. Mainly to see if there is any kind of different response relating to narcissism.
+```
+
+
+```{r}
+fit <- lavaan(model, data = gdnfun, auto.var = TRUE)
+summary(fit, fit.measures = TRUE, standardized=TRUE, rsquare = TRUE)
 ```
 
 ```{r}
-
+parameterEstimates(fit)
+```
+```{r}
+semPaths(fit, what = "std", whatLabels = "std", style="lisrel", edge.label.cex=1, curvePivot=TRUE)
 ```
 
 ```{r}
-
+semPaths(fit, what= "paths", whatLabels="par", style="lisrel", layout="circle2", rotation = 1)
 ```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
